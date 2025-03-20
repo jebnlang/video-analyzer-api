@@ -485,4 +485,67 @@ button.add-button:hover {
 .custom-requirements-list ul {
   padding-left: 20px;
   margin-bottom: 0;
+}
+
+/* Raw API Response Section */
+.raw-response-section {
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
+.developer-note {
+  font-size: 0.8rem;
+  font-weight: normal;
+  color: var(--dark-gray);
+  font-style: italic;
+}
+
+.raw-response-container {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.raw-response-container h4 {
+  color: #444;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+}
+
+.raw-response-container h4:first-child {
+  margin-top: 0;
+}
+
+.raw-response-container pre {
+  background-color: #2d2d2d;
+  color: #f8f8f2;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  max-height: 400px;
+}
+
+.raw-text-content {
+  background-color: white;
+  padding: 12px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  max-height: 300px;
+  overflow: auto;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Style for custom categories with high scores */
+.custom-high-score {
+  background-color: #f0fff4; /* Light green background */
+}
+
+.custom-high-score td:first-child {
+  border-left: 3px solid #4caf50;
+  padding-left: 9px;
 } 

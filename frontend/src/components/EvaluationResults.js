@@ -6,6 +6,7 @@ const EvaluationResults = () => {
   const [results, setResults] = useState(null);
   const [isImprovementsOpen, setIsImprovementsOpen] = useState(true);
   const [isCategoryScoresOpen, setIsCategoryScoresOpen] = useState(true);
+  const [isRawResponseOpen, setIsRawResponseOpen] = useState(false);
   const [customCategories, setCustomCategories] = useState([]);
   const [customCategoryScores, setCustomCategoryScores] = useState([]);
   const [processedData, setProcessedData] = useState(null);
@@ -136,6 +137,10 @@ const EvaluationResults = () => {
   const toggleCategoryScores = () => {
     setIsCategoryScoresOpen(!isCategoryScoresOpen);
   };
+  
+  const toggleRawResponse = () => {
+    setIsRawResponseOpen(!isRawResponseOpen);
+  };
 
   if (!results || !processedData) {
     return <div className="loader"><div className="spinner" /></div>;
@@ -178,7 +183,10 @@ const EvaluationResults = () => {
                       {/* Show individual custom categories if not already in categories */}
                       {customCategories.length > 0 && !merchantCategory && (
                         customCategories.map((category, index) => (
-                          <tr key={`custom-${index}`} className="custom-criteria-row">
+                          <tr 
+                            key={`custom-${index}`} 
+                            className={`custom-criteria-row ${customCategoryScores[index] >= 8 ? 'custom-high-score' : ''}`}
+                          >
                             <td>{category}</td>
                             <td>{customCategoryScores[index]}/10</td>
                           </tr>
@@ -286,6 +294,28 @@ const EvaluationResults = () => {
                 </div>
               </div>
             )}
+            
+            <div className="raw-response-section">
+              <div className="section-header" onClick={toggleRawResponse}>
+                <h3>Raw API Response <span className="developer-note">(For Developers)</span></h3>
+                <span className={`toggle-icon ${isRawResponseOpen ? 'open' : 'closed'}`}>▼</span>
+              </div>
+              
+              <div className={`section-content ${isRawResponseOpen ? 'open' : 'closed'}`}>
+                <div className="raw-response-container">
+                  <h4>Structured Data:</h4>
+                  <pre>{JSON.stringify(structuredData, null, 2)}</pre>
+                  
+                  <h4>Raw Text:</h4>
+                  <div className="raw-text-content">
+                    <ReactMarkdown>{rawText}</ReactMarkdown>
+                  </div>
+                  
+                  <h4>Full API Response:</h4>
+                  <pre>{JSON.stringify(results, null, 2)}</pre>
+                </div>
+              </div>
+            </div>
           </>
         )}
         

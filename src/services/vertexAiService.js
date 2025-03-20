@@ -44,13 +44,13 @@ const extractGoogleDriveFileId = (url) => {
  * @returns {string} - The generated prompt
  */
 const generateAnalysisPrompt = (videoUrl, customCriteria = []) => {
-  // Check if there are merchant-specific requirements
-  const hasMerchantRequirements = customCriteria && customCriteria.length > 0;
+  // Check if there are custom categories
+  const hasCustomCategories = customCriteria && customCriteria.length > 0;
   
-  // Format merchant-specific requirements if they exist
-  let merchantRequirementsText = '';
-  if (hasMerchantRequirements) {
-    merchantRequirementsText = customCriteria.map(criterion => `              * ${criterion}`).join('\n');
+  // Format custom categories if they exist
+  let customCategoriesText = '';
+  if (hasCustomCategories) {
+    customCategoriesText = customCriteria.map(category => `              * ${category}`).join('\n');
   }
 
   return `
@@ -75,28 +75,30 @@ I. General Video Review Quality:
       * Is the review well-structured and easy to follow?
       * Does the review have a logical flow and clear key points?
 
-II. Merchant-Specific Requirements:
+${hasCustomCategories ? `II. Custom Categories Evaluation:
 
-   A. Inclusion:
-      * If merchant-specific requirements are provided:
-          * Does the review include the following elements specified by the merchant?
-${hasMerchantRequirements ? merchantRequirementsText : '              * No merchant-specific requirements provided.'}
-   B. Fulfillment:
-      * If merchant-specific requirements are provided:
-          * To what extent does the review fulfill these specific requirements?
-          * Evaluate the quality and thoroughness of each fulfilled requirement.
+   IMPORTANT: The following custom categories MUST be evaluated separately with individual scores:
+${customCategoriesText}
+   
+   For EACH custom category listed above:
+      * Evaluate to what extent the video meets this specific category requirement
+      * Assign a separate score (1-10) to EACH custom category
+      * Provide specific feedback on how well each requirement is satisfied
+      * Give actionable advice for improvement if needed` : 
+`II. Custom Categories Evaluation:
+      * No custom categories provided for this evaluation.`}
 
 III. Overall Quality Assessment:
 
    A. Provide an overall score for the video review's quality, taking into account the following:
-       * If merchant-specific requirements are provided:
+       * If custom categories are provided:
            * General Video Review Quality: 65% weight
-           * Merchant-Specific Requirements: 35% weight
-       * If no merchant-specific requirements are provided:
+           * Custom Categories: 35% weight
+       * If no custom categories are provided:
            * General Video Review Quality: 100% weight
    B. Justify the score by referencing specific examples from the review and explaining how they contribute to the relevant criteria.
-       * If merchant-specific requirements are provided, explain how examples relate to both General Video Review Quality and Merchant-Specific Requirements.
-       * If no merchant-specific requirements are provided, explain how examples relate to General Video Review Quality.
+       * If custom categories are provided, explain how examples relate to both General Video Review Quality and Custom Categories.
+       * If no custom categories are provided, explain how examples relate to General Video Review Quality.
        * **For any category where the review receives a low score, provide specific and actionable suggestions on how the reviewer can improve in that area.**
 
 Additional Instructions:
@@ -113,7 +115,7 @@ Format your response in Markdown with the following sections:
    - Engagement
    - Detail and Information
    - Structure and Organization
-   - Merchant-Specific Requirements (if applicable)
+   ${hasCustomCategories ? `- Custom Category: ${customCriteria.join('\n   - Custom Category: ')}` : ''}
 3. Suggested Improvements (for any category scoring below 6)
 
 The video is available at: ${videoUrl}
@@ -139,27 +141,77 @@ const extractStructuredData = (analysisText) => {
   const totalScoreMatch = analysisText.match(/Total Score:?\s*(\d+)/i);
   const totalScore = totalScoreMatch ? parseInt(totalScoreMatch[1]) : null;
   
-  // Extract category scores
+  // Extract category scores directly from the Individual Category Scores section
   const categories = [];
-  const categoryRegex = /\*\*(.*?):\*\*\s*(\d+)(?:\/10)?\s*-\s*(.*?)(?=\n|$)/g;
   
-  let match;
-  while ((match = categoryRegex.exec(analysisText)) !== null) {
-    categories.push({
-      name: match[1].trim(),
-      score: parseInt(match[2]),
-      assessment: match[3].trim()
+  // Find the Individual Category Scores section
+  const categoryScoreSection = analysisText.match(/## Individual Category Scores:([\s\S]*?)(?=##|$)/);
+  
+  if (categoryScoreSection && categoryScoreSection[1]) {
+    // Extract each category line
+    const categoryLines = categoryScoreSection[1].match(/- \*\*(.*?):\*\* (\d+)\/10/g) || [];
+    
+    categoryLines.forEach(line => {
+      const match = line.match(/- \*\*(.*?):\*\* (\d+)\/10/);
+      if (match && match[1] && match[2]) {
+        const categoryName = match[1].trim();
+        const score = parseInt(match[2]);
+        
+        // Find the assessment for this category in the improvements section
+        let assessment = '';
+        const improvementMatch = analysisText.match(new RegExp(`\\* \\*\\*${categoryName}:\\*\\* (.*?)(?=\\*\\*|$)`, 's'));
+        if (improvementMatch && improvementMatch[1]) {
+          assessment = improvementMatch[1].trim();
+        }
+        
+        categories.push({
+          name: categoryName,
+          score: score,
+          assessment: assessment
+        });
+      }
     });
   }
   
-  // If no categories were found with the first regex, try an alternative pattern
+  // If no categories were found with the above method, fall back to previous methods
   if (categories.length === 0) {
-    const altCategoryRegex = /([A-Z][a-zA-Z\s]+):\s*(\d+)(?:\/10)?\s*-\s*(.*?)(?=\n|$)/g;
-    while ((match = altCategoryRegex.exec(analysisText)) !== null) {
+    // Previous extraction code can go here as fallback
+    const categoryRegex = /\*\*(.*?):\*\*\s*(\d+)(?:\/10)?\s*-\s*(.*?)(?=\n|$)/g;
+    
+    let match;
+    while ((match = categoryRegex.exec(analysisText)) !== null) {
       categories.push({
         name: match[1].trim(),
         score: parseInt(match[2]),
         assessment: match[3].trim()
+      });
+    }
+    
+    // Additional fallback patterns if needed
+  }
+  
+  // Check for specific custom category scores in justification sections
+  const customCategoryPattern = /Custom Category:?\s*(.*?):\s*.*?Score:\s*(\d+)/gis;
+  let customMatch;
+  while ((customMatch = customCategoryPattern.exec(analysisText)) !== null) {
+    const categoryName = customMatch[1].trim();
+    const score = parseInt(customMatch[2]);
+    
+    // Check if this category already exists
+    const existingCategory = categories.find(cat => 
+      cat.name.toLowerCase() === categoryName.toLowerCase() || 
+      cat.name.toLowerCase() === `custom category: ${categoryName.toLowerCase()}`
+    );
+    
+    if (existingCategory) {
+      // Update the score to the one found in justification
+      existingCategory.score = score;
+    } else {
+      // Add as a new category
+      categories.push({
+        name: categoryName,
+        score: score,
+        assessment: `This custom category received a score of ${score}/10.`
       });
     }
   }
@@ -176,29 +228,11 @@ const extractStructuredData = (analysisText) => {
     }
     
     // Extract individual category improvements
-    const categoryRegex = /\*\*(.*?):\*\*\s*(.*?)(?=\n\n|\*\*|$)/gs;
+    const bulletPoints = improvementSection.match(/\* \*\*(.*?):\*\*(.*?)(?=\n\* \*\*|$)/gs) || [];
     
-    while ((match = categoryRegex.exec(improvementSection)) !== null) {
-      const category = match[1].trim();
-      const suggestionsText = match[2].trim();
-      
-      // Split the suggestions by periods, bullet points, or numbered items
-      const suggestionsList = suggestionsText
-        .split(/\.\s+|•\s+|\d+\.\s+/)
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.endsWith('.') && s !== '-')
-        .map(s => s.endsWith('.') ? s : s + '.');
-      
-      improvements.push({
-        category,
-        suggestions: suggestionsList
-      });
-    }
-    
-    // If no improvements were found with the first regex, try an alternative pattern
-    if (improvements.length === 0) {
-      const altCategoryRegex = /([A-Z][a-zA-Z\s]+):\s*(.*?)(?=\n\n|[A-Z][a-zA-Z\s]+:|$)/gs;
-      while ((match = altCategoryRegex.exec(improvementSection)) !== null) {
+    bulletPoints.forEach(point => {
+      const match = point.match(/\* \*\*(.*?):\*\*(.*)/s);
+      if (match && match[1] && match[2]) {
         const category = match[1].trim();
         const suggestionsText = match[2].trim();
         
@@ -206,7 +240,7 @@ const extractStructuredData = (analysisText) => {
         const suggestionsList = suggestionsText
           .split(/\.\s+|•\s+|\d+\.\s+/)
           .map(s => s.trim())
-          .filter(s => s.length > 0 && !s.endsWith('.') && s !== '-')
+          .filter(s => s.length > 0 && s !== '-' && s !== '*')
           .map(s => s.endsWith('.') ? s : s + '.');
         
         improvements.push({
@@ -214,6 +248,11 @@ const extractStructuredData = (analysisText) => {
           suggestions: suggestionsList
         });
       }
+    });
+    
+    // If no improvements were found with the first method, try alternative patterns
+    if (improvements.length === 0) {
+      // Previous improvement extraction code can go here as fallback
     }
   }
   
