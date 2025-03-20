@@ -84,24 +84,27 @@ const EvaluationResults = () => {
       let totalScore = structuredData?.totalScore;
       
       if (!totalScore) {
-        // Calculate average score if totalScore is missing
+        // Calculate weighted average score if totalScore is missing
         if (categories.length === 0) {
+          // If no standard categories, use only custom categories
           totalScore = categoryList.length > 0 ? 
             categoryScores.reduce((sum, score) => sum + score, 0) / categoryScores.length : 
             0;
         } else {
           const standardCategoriesSum = categories.reduce((total, category) => total + (category.score || 0), 0);
-          const standardCategoriesCount = categories.length;
           
           // If no custom categories or we already have a merchant category, just use standard categories
           if (categoryList.length === 0 || merchantCategory) {
-            totalScore = Math.round((standardCategoriesSum / standardCategoriesCount) * 10) / 10;
+            totalScore = Math.round((standardCategoriesSum / categories.length) * 10) / 10;
           } else {
-            // Include custom categories scores in the calculation
-            const totalSum = standardCategoriesSum + categoryScores.reduce((sum, score) => sum + score, 0);
-            const totalCount = standardCategoriesCount + categoryScores.length;
+            // Apply 65/35 weighting
+            const standardWeight = 0.65;
+            const customWeight = 0.35;
             
-            totalScore = Math.round((totalSum / totalCount) * 10) / 10;
+            const standardWeightedScore = (standardCategoriesSum / categories.length) * standardWeight;
+            const customWeightedScore = (categoryScores.reduce((sum, score) => sum + score, 0) / categoryScores.length) * customWeight;
+            
+            totalScore = Math.round((standardWeightedScore + customWeightedScore) * 10) / 10;
           }
         }
       }
@@ -170,32 +173,50 @@ const EvaluationResults = () => {
                       <tr>
                         <th>Category</th>
                         <th>Score</th>
+                        <th>Contribution to Overall</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {categories.map((category, index) => (
-                        <tr key={index} className={category.score < 6 ? 'low-score' : ''}>
-                          <td>{category.name}</td>
-                          <td>{category.score}/10</td>
-                        </tr>
-                      ))}
+                      {categories.map((category, index) => {
+                        // Calculate weight based on whether there are custom categories
+                        const hasCustomCategories = customCategories.length > 0 && !merchantCategory;
+                        const standardCategoryWeight = hasCustomCategories ? 
+                          0.65 / categories.length : // 65% split among standard categories
+                          1 / categories.length;     // 100% split if no custom categories
+                        
+                        const weightedScore = (category.score * standardCategoryWeight).toFixed(2);
+                        return (
+                          <tr key={index} className={category.score < 6 ? 'low-score' : ''}>
+                            <td>{category.name}</td>
+                            <td>{category.score}/10</td>
+                            <td>{weightedScore} ({(standardCategoryWeight * 100).toFixed(0)}%)</td>
+                          </tr>
+                        );
+                      })}
                       
                       {/* Show individual custom categories if not already in categories */}
                       {customCategories.length > 0 && !merchantCategory && (
-                        customCategories.map((category, index) => (
-                          <tr 
-                            key={`custom-${index}`} 
-                            className={`custom-criteria-row ${customCategoryScores[index] >= 8 ? 'custom-high-score' : ''}`}
-                          >
-                            <td>{category}</td>
-                            <td>{customCategoryScores[index]}/10</td>
-                          </tr>
-                        ))
+                        customCategories.map((category, index) => {
+                          // 35% split among custom categories
+                          const customCategoryWeight = 0.35 / customCategories.length;
+                          const weightedScore = (customCategoryScores[index] * customCategoryWeight).toFixed(2);
+                          return (
+                            <tr 
+                              key={`custom-${index}`} 
+                              className={`custom-criteria-row ${customCategoryScores[index] >= 8 ? 'custom-high-score' : ''}`}
+                            >
+                              <td>{category}</td>
+                              <td>{customCategoryScores[index]}/10</td>
+                              <td>{weightedScore} ({(customCategoryWeight * 100).toFixed(0)}%)</td>
+                            </tr>
+                          );
+                        })
                       )}
                       
                       <tr className="total-row">
-                        <td><strong>Overall Score</strong> {structuredData.totalScore ? '(from AI analysis)' : '(average of all categories)'}</td>
+                        <td><strong>Overall Score</strong> {structuredData.totalScore ? '(from AI analysis)' : '(weighted average)'}</td>
                         <td><strong>{totalScore}/10</strong></td>
+                        <td><strong>Sum: {totalScore}</strong></td>
                       </tr>
                     </tbody>
                   </table>
