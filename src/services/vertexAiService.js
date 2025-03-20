@@ -53,14 +53,6 @@ const generateAnalysisPrompt = (videoUrl, customCriteria = []) => {
     merchantRequirementsText = customCriteria.map(criterion => `              * ${criterion}`).join('\n');
   }
 
-  // Create a separate section for merchant requirements in the scoring section
-  let merchantScoringSection = '';
-  if (hasMerchantRequirements) {
-    merchantScoringSection = `
-   F. Merchant-Specific Requirements (IMPORTANT - These must be evaluated separately):
-${customCriteria.map(criterion => `      * ${criterion}`).join('\n')}`;
-  }
-
   return `
 Evaluate the quality of a video review based on the following criteria:
 
@@ -81,7 +73,7 @@ I. General Video Review Quality:
       * Does the review thoroughly explain the reviewer's experience?
    E. Structure and Organization:
       * Is the review well-structured and easy to follow?
-      * Does the review have a logical flow and clear key points?${merchantScoringSection}
+      * Does the review have a logical flow and clear key points?
 
 II. Merchant-Specific Requirements:
 
@@ -112,7 +104,6 @@ Additional Instructions:
 * Focus on the quality and content of the review, not the reviewer's personal style or subjective opinions unrelated to the product.
 * Remember that the goal is an honest, clear, and well-presented review, not necessarily a positive one.
 * Identify areas where the review excels and areas where it can be improved.
-${hasMerchantRequirements ? '* IMPORTANT: You MUST evaluate each of the merchant-specific requirements separately and provide a score for each one.' : ''}
 
 Format your response in Markdown with the following sections:
 1. Total Score (out of 10)
@@ -122,7 +113,7 @@ Format your response in Markdown with the following sections:
    - Engagement
    - Detail and Information
    - Structure and Organization
-${hasMerchantRequirements ? customCriteria.map(criterion => `   - ${criterion.split(' - ')[0]}`).join('\n') : '   - Merchant-Specific Requirements (if applicable)'}
+   - Merchant-Specific Requirements (if applicable)
 3. Suggested Improvements (for any category scoring below 6)
 
 The video is available at: ${videoUrl}
@@ -141,10 +132,9 @@ const getSampleVideoUrl = () => {
 /**
  * Extracts structured data from the Gemini response text
  * @param {string} analysisText - The raw analysis text from Gemini
- * @param {Array} customCriteria - Optional custom criteria that were passed to the prompt
  * @returns {Object} - Structured analysis data
  */
-const extractStructuredData = (analysisText, customCriteria = []) => {
+const extractStructuredData = (analysisText) => {
   // Extract total score
   const totalScoreMatch = analysisText.match(/Total Score:?\s*(\d+)/i);
   const totalScore = totalScoreMatch ? parseInt(totalScoreMatch[1]) : null;
@@ -172,42 +162,6 @@ const extractStructuredData = (analysisText, customCriteria = []) => {
         assessment: match[3].trim()
       });
     }
-  }
-  
-  // Check for merchant-specific requirements
-  const merchantRequirements = [];
-  if (customCriteria && customCriteria.length > 0) {
-    customCriteria.forEach(criterion => {
-      const criterionName = criterion.split(' - ')[0].trim();
-      
-      // Look for this criterion in the categories
-      const matchingCategory = categories.find(cat => 
-        cat.name.toLowerCase().includes(criterionName.toLowerCase())
-      );
-      
-      if (matchingCategory) {
-        merchantRequirements.push({
-          name: criterionName,
-          score: matchingCategory.score,
-          assessment: matchingCategory.assessment,
-          fulfilled: matchingCategory.score >= 6
-        });
-      } else {
-        // Try to find it in the text directly
-        const criterionRegex = new RegExp(`${criterionName}[^\\n]*?(\\d+)(?:\/10)?[^\\n]*?([^\\n]+)`, 'i');
-        const criterionMatch = analysisText.match(criterionRegex);
-        
-        if (criterionMatch) {
-          const score = parseInt(criterionMatch[1]);
-          merchantRequirements.push({
-            name: criterionName,
-            score: score,
-            assessment: criterionMatch[2].trim(),
-            fulfilled: score >= 6
-          });
-        }
-      }
-    });
   }
   
   // Extract improvement suggestions
@@ -289,16 +243,6 @@ const extractStructuredData = (analysisText, customCriteria = []) => {
     } else {
       summary = `This video review needs a complete overhaul to improve ${weakest.name.toLowerCase()} and overall quality. Addressing these issues will enhance professionalism, viewer retention, and product messaging effectiveness.`;
     }
-    
-    // Add merchant requirements to summary if they exist
-    if (merchantRequirements.length > 0) {
-      const unfulfilled = merchantRequirements.filter(req => !req.fulfilled);
-      if (unfulfilled.length > 0) {
-        summary += ` The review does not meet the merchant requirements for: ${unfulfilled.map(req => req.name).join(', ')}.`;
-      } else {
-        summary += ` The review successfully meets all merchant requirements.`;
-      }
-    }
   } else {
     summary = "Unable to generate a summary due to missing score data.";
   }
@@ -306,7 +250,6 @@ const extractStructuredData = (analysisText, customCriteria = []) => {
   return {
     totalScore,
     categories,
-    merchantRequirements,
     improvements,
     summary,
     analysisDate: new Date().toISOString()
@@ -390,7 +333,7 @@ const analyzeVideo = async (videoUrl, customCriteria = [], useSampleVideo = fals
     const basicAnalysisText = result.candidates[0].content.parts[0].text;
     
     // Extract structured data from the analysis text
-    const structuredData = extractStructuredData(basicAnalysisText, customCriteria);
+    const structuredData = extractStructuredData(basicAnalysisText);
 
     return {
       structuredData,
